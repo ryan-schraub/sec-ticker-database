@@ -65,7 +65,8 @@
                 <tr>
                     <th>Ticker</th>
                     <th>Company Name</th>
-                    <th>Location</th> <th>Inc</th>      <th>FYE</th>      <th>Industry</th> <th>Latest 10-K</th>
+                    <th>Location</th> <th>Inc</th> <th>FYE</th> <th>Industry</th> 
+                    <th>Latest 10-K</th>
                     <th>Latest 10-Q</th>
                     <th>Intelligence</th>
                 </tr>
@@ -89,50 +90,58 @@
     setInterval(updateClock, 1000);
 
     async function initTable() {
-        const response = await fetch('tickers_preview.csv');
-        const csvData = await response.text();
-        
-        Papa.parse(csvData, {
-            header: true,
-            skipEmptyLines: true,
-            complete: function(results) {
-                document.getElementById('tickerCount').innerText = results.data.length.toLocaleString();
+        try {
+            const response = await fetch('tickers_preview.csv');
+            const csvData = await response.text();
+            
+            Papa.parse(csvData, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    document.getElementById('tickerCount').innerText = results.data.length.toLocaleString();
 
-                $('#filingTable').DataTable({
-                    data: results.data,
-                    deferRender: true,
-                    pageLength: 20,
-                    dom: 'Bfrtip', // B adds the Column Visibility button
-                    buttons: [
-                        {
-                            extend: 'colvis',
-                            text: 'Toggle Metadata',
-                            columns: [2, 3, 4, 5] // Location, Inc, FYE, Industry
-                        }
-                    ],
-                    columns: [
-                        { data: 'Ticker', render: d => `<span class="ticker-badge">${d}</span>` },
-                        { data: 'Company', className: 'fw-semibold' },
-                        { data: 'Location', visible: false },
-                        { data: 'Inc', visible: false },
-                        { data: 'FYE', visible: false },
-                        { data: 'Industry', visible: false },
-                        { 
-                            data: 'K_Date', 
-                            render: (date, type, row) => row.K_Link ? `<a href="${row.K_Link}" target="_blank" class="text-decoration-none">📄 ${date}</a>` : '—'
-                        },
-                        { 
-                            data: 'Q_Date', 
-                            render: (date, type, row) => row.Q_Link ? `<a href="${row.Q_Link}" target="_blank" class="text-decoration-none">📄 ${date}</a>` : '—'
-                        },
-                        { 
-                            data: 'Ticker',
-                            render: (ticker) => `<a href="reports/analysis_${ticker.toLowerCase()}.html" class="btn btn-sm btn-analysis">ANALYZE</a>`
-                        }
-                    ]
-                });
-            }
-        });
+                    $('#filingTable').DataTable({
+                        data: results.data,
+                        deferRender: true,
+                        pageLength: 20,
+                        dom: 'Bfrtip',
+                        // --- THE SAFETY CATCH ---
+                        columnDefs: [
+                            { "defaultContent": "—", "targets": "_all" }
+                        ],
+                        buttons: [
+                            {
+                                extend: 'colvis',
+                                text: 'Toggle Metadata',
+                                columns: [2, 3, 4, 5]
+                            }
+                        ],
+                        columns: [
+                            { data: 'Ticker', render: d => `<span class="ticker-badge">${d}</span>` },
+                            { data: 'Company', className: 'fw-semibold' },
+                            { data: 'Location', visible: false },
+                            { data: 'Inc', visible: false },
+                            { data: 'FYE', visible: false },
+                            { data: 'Industry', visible: false },
+                            { 
+                                data: 'K_Date', 
+                                render: (date, type, row) => row.K_Link ? `<a href="${row.K_Link}" target="_blank" class="text-decoration-none">📄 ${date}</a>` : '—'
+                            },
+                            { 
+                                data: 'Q_Date', 
+                                render: (date, type, row) => row.Q_Link ? `<a href="${row.Q_Link}" target="_blank" class="text-decoration-none">📄 ${date}</a>` : '—'
+                            },
+                            { 
+                                data: 'Ticker',
+                                render: (ticker) => `<a href="reports/analysis_${ticker.toLowerCase()}.html" class="btn btn-sm btn-analysis">ANALYZE</a>`
+                            }
+                        ]
+                    });
+                }
+            });
+        } catch (err) {
+            console.error("Error loading CSV:", err);
+        }
     }
     $(document).ready(initTable);
 </script>
