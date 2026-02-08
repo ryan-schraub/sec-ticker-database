@@ -1,12 +1,13 @@
 name: SEC Historical Sync
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs daily at midnight
-  workflow_dispatch:
+    - cron: '0 0 * * *' # Every night at midnight
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
-  run-all:
+  update-data:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:
@@ -17,12 +18,12 @@ jobs:
           python-version: '3.10'
       - name: Install Dependencies
         run: pip install requests
-      - name: Execute Script
+      - name: Run SEC Sync
         run: python update_tickers.py
-      - name: Save Data
+      - name: Commit and Push
         run: |
-          git config --global user.name "SEC-Bot"
+          git config --global user.name "SEC-Sync-Bot"
           git config --global user.email "bot@example.com"
           git add tickers.db tickers_preview.csv
-          git commit -m "Updated Filing Data: $(date)" || echo "No changes"
+          git commit -m "Full SEC History Sync: $(date)" || echo "No changes"
           git push
