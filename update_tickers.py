@@ -2,68 +2,91 @@ import requests
 import sqlite3
 import csv
 import sys
+from datetime import datetime
 
-# 1. Setup Database
+# 1. Setup Database with History Support
 db_file = 'tickers.db'
 conn = sqlite3.connect(db_file)
 cursor = conn.cursor()
 
-# We use CIK as the PRIMARY KEY so we never get duplicates
+# Main Table: Current source of truth
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS sec_tickers (
         cik INTEGER PRIMARY KEY,
         ticker TEXT,
         name TEXT,
-        last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+        is_active INTEGER DEFAULT 1,
+        last_updated DATETIME
     )
 ''')
 
-# 2. Fetch Data from SEC
-# SEC requires a real-looking User-Agent or they return a 403 Forbidden error
-headers = {
-    'User-Agent': 'RyanSchraub (ryan.schraub@gmail.com)',
-    'Accept-Encoding': 'gzip, deflate'
-}
+# History Table: Tracks every time a ticker changes
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS ticker_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cik INTEGER,
+        old_ticker TEXT,
+        new_ticker TEXT,
+        change_date DATETIME
+    )
+''')
+
+# 2. Fetch Data
+headers = {'User-Agent': 'RyanSchraub (ryan.schraub@gmail.com)'}
 url = "https://www.sec.gov/files/company_tickers.json"
 
-print("Contacting SEC.gov...")
 try:
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     data = response.json()
     
-    # 3. Process and Upsert Data
-    # 'Upsert' means: If CIK exists, update it. If not, insert it.
-    ticker_data = []
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    incoming_ciks = set()
+
+    # 3. Process Updates & History
     for entry in data.values():
-        ticker_data.append((entry['cik_str'], entry['ticker'], entry['title']))
+        cik = entry['cik_str']
+        ticker = entry['ticker']
+        name = entry['title']
+        incoming_ciks.add(cik)
 
-    cursor.executemany('''
-        INSERT INTO sec_tickers (cik, ticker, name)
-        VALUES (?, ?, ?)
-        ON CONFLICT(cik) DO UPDATE SET
-            ticker=excluded.ticker,
-            name=excluded.name,
-            last_updated=CURRENT_TIMESTAMP
-    ''', ticker_data)
-    
+        # Check for ticker changes before updating
+        cursor.execute("SELECT ticker FROM sec_tickers WHERE cik = ?", (cik,))
+        existing = cursor.fetchone()
+
+        if existing and existing[0] != ticker:
+            # Ticker changed! Log it in history
+            cursor.execute('''
+                INSERT INTO ticker_history (cik, old_ticker, new_ticker, change_date)
+                VALUES (?, ?, ?, ?)
+            ''', (cik, existing[0], ticker, current_time))
+
+        # Upsert the main record
+        cursor.execute('''
+            INSERT INTO sec_tickers (cik, ticker, name, is_active, last_updated)
+            VALUES (?, ?, ?, 1, ?)
+            ON CONFLICT(cik) DO UPDATE SET
+                ticker=excluded.ticker,
+                name=excluded.name,
+                is_active=1,
+                last_updated=excluded.last_updated
+        ''', (cik, ticker, name, current_time))
+
+    # 4. Handle Delistings (Mark inactive if missing from SEC file)
+    cursor.execute("UPDATE sec_tickers SET is_active = 0 WHERE cik NOT IN ({})".format(
+        ','.join(['?'] * len(incoming_ciks))), list(incoming_ciks))
+
     conn.commit()
-    print(f"Successfully processed {len(ticker_data)} tickers.")
 
-    # 4. Export to CSV for GitHub Preview
-    # This creates the file that GitHub shows as a table in your browser
-    cursor.execute("SELECT ticker, cik, name FROM sec_tickers ORDER BY ticker ASC")
-    rows = cursor.fetchall()
-    
+    # 5. Export Daily CSV Preview
+    cursor.execute("SELECT ticker, cik, name, is_active FROM sec_tickers ORDER BY ticker ASC")
     with open('tickers_preview.csv', 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['Ticker', 'CIK', 'Company Name'])
-        writer.writerows(rows)
-    
-    print("CSV preview file generated.")
+        writer.writerow(['Ticker', 'CIK', 'Name', 'Active Status'])
+        writer.writerows(cursor.fetchall())
 
 except Exception as e:
     print(f"Error: {e}")
-    sys.exit(1) # Fail the GitHub Action if the script fails
+    sys.exit(1)
 finally:
     conn.close()
