@@ -5,10 +5,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <style>
-        body { padding: 30px; background: #f4f7f6; font-family: sans-serif; }
+        body { padding: 30px; background: #f8f9fa; }
         .badge-rebrand { background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
         .badge-change { background: #ffc107; color: black; padding: 4px 8px; border-radius: 4px; }
-        .ai-note { font-style: italic; color: #666; font-size: 0.85rem; }
+        .ai-note { font-style: italic; color: #555; font-size: 0.85rem; }
     </style>
 </head>
 <body>
@@ -37,6 +37,7 @@
         Papa.parse("tickers_preview.csv", {
             download: true,
             header: true,
+            skipEmptyLines: true,
             complete: function(results) {
                 $('#tickerTable').DataTable({
                     data: results.data,
@@ -47,14 +48,14 @@
                         { 
                             data: "Last Event",
                             render: function(data) {
-                                if (data.includes("REBRAND")) return `<span class="badge-rebrand">${data}</span>`;
-                                if (data.includes("TICKER_CHANGE")) return `<span class="badge-change">${data}</span>`;
-                                return data === "-" ? `<span class="text-muted">-</span>` : data;
+                                if (data && data.includes("REBRAND")) return `<span class="badge-rebrand">${data}</span>`;
+                                if (data && data.includes("TICKER_CHANGE")) return `<span class="badge-change">${data}</span>`;
+                                return (data === "-" || !data) ? `<span class="text-muted">-</span>` : data;
                             }
                         },
                         { 
                             data: "AI Research",
-                            render: function(data) { return `<span class="ai-note">${data}</span>`; }
+                            render: function(data) { return `<span class="ai-note">${data || ""}</span>`; }
                         },
                         { data: "Date Detected" }
                     ],
