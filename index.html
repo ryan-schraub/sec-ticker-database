@@ -131,9 +131,9 @@
                                 render: (date, type, row) => row['10Q_Link'] ? `<a href="${row['10Q_Link']}" target="_blank" class="text-decoration-none">📄 ${date}</a>` : '—'
                             },
                             { 
-                                data: 'Ticker',
-                                render: (ticker) => `<a href="reports/analysis_${ticker.toLowerCase()}.html" class="btn btn-sm btn-analysis">ANALYZE</a>`
-                            }
+    data: 'Ticker',
+    render: (ticker) => `<a href="analysis.html?ticker=${ticker.toLowerCase()}" class="btn btn-sm btn-analysis">ANALYZE</a>`
+}
                         ]
                     });
                 }
