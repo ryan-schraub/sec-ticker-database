@@ -2,89 +2,66 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SEC Filing Tracker</title>
+    <title>SEC Historical Filing Tracker</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        body { font-family: sans-serif; margin: 20px; background: #f4f4f9; }
-        table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #004a99; color: white; position: sticky; top: 0; }
-        tr:hover { background-color: #f1f1f1; }
-        .link-btn { 
-            text-decoration: none; 
-            background: #28a745; 
-            color: white; 
-            padding: 5px 10px; 
-            border-radius: 4px; 
-            font-size: 0.85em; 
-        }
-        .link-btn:hover { background: #218838; }
-        #search { padding: 10px; width: 300px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        body { font-family: -apple-system, sans-serif; margin: 30px; background: #f0f2f5; }
+        .container { max-width: 1100px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #004a99; color: white; }
+        .btn { text-decoration: none; color: white; background: #007bff; padding: 6px 12px; border-radius: 4px; font-size: 13px; }
+        #search { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
     </style>
 </head>
 <body>
-
-    <h2>SEC Filing Tracker (10-K & 10-Q)</h2>
-    <input type="text" id="search" placeholder="Search Ticker or Company..." onkeyup="filterTable()">
-
-    <table id="tickerTable">
-        <thead>
-            <tr>
-                <th>Ticker</th>
-                <th>Company</th>
-                <th>Status</th>
-                <th>Earnings</th>
-                <th>Last 10-K/Q</th>
-                <th>Filing Link</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+    <div class="container">
+        <h2>SEC Master Filing Database</h2>
+        <input type="text" id="search" placeholder="Filter by Ticker or Company Name..." onkeyup="filterTable()">
+        <table id="targetTable">
+            <thead>
+                <tr>
+                    <th>Ticker</th>
+                    <th>Company Name</th>
+                    <th>Estimated Earnings</th>
+                    <th>Latest 10-K/Q</th>
+                    <th>Document</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
 
     <script>
-        async function loadCSV() {
-            const response = await fetch('tickers_preview.csv');
-            const csvData = await response.text();
-            
-            Papa.parse(csvData, {
+        async function init() {
+            const resp = await fetch('tickers_preview.csv');
+            const csv = await resp.text();
+            Papa.parse(csv, {
                 header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    const tableBody = document.querySelector('#tickerTable tbody');
-                    tableBody.innerHTML = ''; // Clear existing
-                    results.data.forEach(row => {
+                complete: (res) => {
+                    const body = document.querySelector('#targetTable tbody');
+                    res.data.forEach(row => {
+                        if(!row.Ticker) return;
                         const tr = document.createElement('tr');
-                        
-                        // Create a button if a link exists
-                        const linkBtn = row['Filing Link'] && row['Filing Link'].startsWith('http') 
-                            ? `<a href="${row['Filing Link']}" target="_blank" class="link-btn">View Document</a>` 
-                            : '<span style="color:gray">N/A</span>';
-
+                        const link = row['Filing Link'] ? `<a class="btn" href="${row['Filing Link']}" target="_blank">View PDF/HTML</a>` : '—';
                         tr.innerHTML = `
                             <td><strong>${row.Ticker}</strong></td>
                             <td>${row.Company}</td>
-                            <td>${row.Status || '-'}</td>
                             <td>${row.Earnings}</td>
                             <td>${row['Last 10-K/Q']}</td>
-                            <td>${linkBtn}</td>
+                            <td>${link}</td>
                         `;
-                        tableBody.appendChild(tr);
+                        body.appendChild(tr);
                     });
                 }
             });
         }
-
         function filterTable() {
-            const input = document.getElementById("search").value.toUpperCase();
-            const rows = document.querySelectorAll("#tickerTable tbody tr");
-            rows.forEach(row => {
-                const text = row.innerText.toUpperCase();
-                row.style.display = text.includes(input) ? "" : "none";
-            });
+            let val = document.getElementById('search').value.toUpperCase();
+            let rows = document.querySelectorAll('#targetTable tbody tr');
+            rows.forEach(r => r.style.display = r.innerText.toUpperCase().includes(val) ? '' : 'none');
         }
-
-        window.onload = loadCSV;
+        init();
     </script>
 </body>
 </html>
