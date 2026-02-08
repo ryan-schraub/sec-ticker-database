@@ -2,26 +2,26 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SEC Security Master</title>
+    <title>SEC Master Event Tracker</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <style>
-        body { padding: 40px; background-color: #f8f9fa; }
-        .confirmed { color: #198754; font-weight: bold; }
-        .deadline { color: #6c757d; font-size: 0.85rem; }
+        body { padding: 20px; background: #f8f9fa; }
+        .badge-ai { background: #0d6efd; color: white; } /* Blue for AI */
+        .badge-legal { background: #6c757d; color: white; } /* Gray for Fallback */
     </style>
 </head>
 <body>
-    <div class="container-fluid shadow p-4 bg-white rounded">
-        <h2 class="mb-4">📈 SEC Market Event Tracker</h2>
-        <table id="eventTable" class="table table-hover" style="width:100%">
+    <div class="container-fluid bg-white p-4 shadow rounded">
+        <h2>📊 SEC Security Master & AI Earnings</h2>
+        <table id="masterTable" class="table table-sm table-hover" style="width:100%">
             <thead>
                 <tr>
                     <th>Ticker</th>
                     <th>Company</th>
                     <th>Status</th>
                     <th>Earnings</th>
-                    <th>Last Sync</th>
+                    <th>Sync</th>
                 </tr>
             </thead>
         </table>
@@ -33,25 +33,26 @@
 
     <script>
         Papa.parse("tickers_preview.csv", {
-            download: true,
-            header: true,
+            download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
-                $('#eventTable').DataTable({
+                $('#masterTable').DataTable({
                     data: results.data,
                     columns: [
-                        { data: "Ticker" },
+                        { data: "Ticker", render: d => `<b>${d}</b>` },
                         { data: "Company" },
-                        { data: "Status" },
+                        { 
+                            data: "Status",
+                            render: s => s === "EARNINGS_ANNOUNCED" ? `<span class="badge badge-ai">NEW INFO</span>` : d
+                        },
                         { 
                             data: "Earnings",
-                            render: function(d) {
-                                return d.includes("Confirmed") ? `<span class="confirmed">✅ ${d}</span>` : `<span class="deadline">${d}</span>`;
+                            render: function(e) {
+                                return e.includes("Confirmed") ? `<span class="text-success fw-bold">${e}</span>` : `<span class="text-muted small">${e}</span>`;
                             }
                         },
-                        { data: "Last Sync" }
+                        { data: "LastSync" }
                     ],
-                    columnDefs: [{ "defaultContent": "-", "targets": "_all" }],
-                    pageLength: 25
+                    order: [[0, 'asc']]
                 });
             }
         });
