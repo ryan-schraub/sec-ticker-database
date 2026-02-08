@@ -1,27 +1,69 @@
-<thead>
-    <tr>
-        <th>Ticker</th>
-        <th>CIK</th>
-        <th>Company Name</th>
-        <th>Last Event</th>
-        <th>AI Research</th> <th>Date Detected</th>
-    </tr>
-</thead>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SEC Security Master | Ryan Schraub</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+    <style>
+        body { padding: 30px; background: #f8f9fa; }
+        .badge-rebrand { background: #dc3545; color: white; }
+        .badge-change { background: #ffc107; color: black; }
+        .ai-text { font-style: italic; color: #555; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid bg-white p-4 rounded shadow">
+        <h2 class="mb-4">📊 SEC Security Master & AI Insights</h2>
+        <table id="tickerTable" class="table table-striped table-hover" style="width:100%">
+            <thead>
+                <tr>
+                    <th>Ticker</th>
+                    <th>CIK</th>
+                    <th>Company Name</th>
+                    <th>Last Event</th>
+                    <th>AI Research Summary</th>
+                    <th>Date Detected</th>
+                </tr>
+            </thead>
+        </table>
+    </div>
 
-<script>
-    // ... inside the DataTables initialization ...
-    columns: [
-        { data: "Ticker" },
-        { data: "CIK" },
-        { data: "Name" },
-        { 
-            data: "Last Event",
-            render: function(data) {
-                if (data.includes("TICKER_CHANGE")) return `<span class="badge bg-warning text-dark">${data}</span>`;
-                return data === "-" ? `<span class="text-muted">-</span>` : data;
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <script>
+        Papa.parse("tickers_preview.csv", {
+            download: true,
+            header: true,
+            complete: function(results) {
+                $('#tickerTable').DataTable({
+                    data: results.data,
+                    columns: [
+                        { data: "Ticker" },
+                        { data: "CIK" },
+                        { data: "Name" },
+                        { 
+                            data: "Last Event",
+                            render: function(data) {
+                                if (data.includes("REBRAND")) return `<span class="badge badge-rebrand">${data}</span>`;
+                                if (data.includes("TICKER_CHANGE")) return `<span class="badge badge-change">${data}</span>`;
+                                return data === "-" ? `<span class="text-muted">-</span>` : data;
+                            }
+                        },
+                        { 
+                            data: "AI Research",
+                            render: function(data) { return `<span class="ai-text">${data || ""}</span>`; }
+                        },
+                        { data: "Date Detected" }
+                    ],
+                    pageLength: 25,
+                    order: [[5, 'desc']] // Sort by Date
+                });
             }
-        },
-        { data: "AI Research" }, // Display the AI summary
-        { data: "Date Detected" }
-    ]
-</script>
+        });
+    </script>
+</body>
+</html>
