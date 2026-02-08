@@ -1,7 +1,7 @@
 name: SEC Master & Research Sync
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 * * * *' # Runs every hour
   workflow_dispatch:
 
 jobs:
@@ -11,18 +11,23 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          
       - name: Install Dependencies
         run: pip install requests
+        
       - name: Execute Script
-        run: python update_tickers.py
+        run: python update_tickers.py # Ensure your python script is named this
+        
       - name: Save Updated DB and CSV
         run: |
           git config --global user.name "SEC-Sync-Bot"
           git config --global user.email "bot@example.com"
           git add tickers.db tickers_preview.csv
-          git commit -m "Automated Update: $(date)" || echo "No changes"
+          # The || exit 0 prevents the workflow from failing if there are no new filings
+          git commit -m "Automated Update: $(date)" || exit 0
           git push
