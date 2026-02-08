@@ -15,7 +15,7 @@ def main():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    # 1. UPDATED TABLE: Added 'filing_url' column
+    # 1. CREATE TABLE & UPDATE SCHEMA
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ticker_event_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,11 +24,18 @@ def main():
             name TEXT,
             event_scenario TEXT, 
             next_earnings TEXT, 
-            last_filing TEXT,
-            filing_url TEXT,
             timestamp DATETIME
         )
     ''')
+
+    # Migration: Add 'last_filing' and 'filing_url' if they are missing from the old DB
+    cursor.execute("PRAGMA table_info(ticker_event_log)")
+    columns = [info[1] for info in cursor.fetchall()]
+    
+    if 'last_filing' not in columns:
+        cursor.execute('ALTER TABLE ticker_event_log ADD COLUMN last_filing TEXT DEFAULT "None Found"')
+    if 'filing_url' not in columns:
+        cursor.execute('ALTER TABLE ticker_event_log ADD COLUMN filing_url TEXT DEFAULT ""')
 
     # 2. PART A: THE MASTER LIST
     master_data = requests.get("https://www.sec.gov/files/company_tickers.json", headers=HEADERS).json()
@@ -36,6 +43,7 @@ def main():
 
     for item in master_data.values():
         cik, ticker, name = item['cik_str'], item['ticker'].upper(), item['title']
+        # We include all columns here now that the migration ensures they exist
         cursor.execute('''
             INSERT OR IGNORE INTO ticker_event_log (cik, ticker, name, event_scenario, next_earnings, last_filing, filing_url, timestamp) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -49,14 +57,11 @@ def main():
         
         for entry in root.findall('atom:entry', ns):
             title = entry.find('atom:title', ns).text
-            
-            # Check for 10-K or 10-Q specifically
             if any(form in title for form in ["10-K", "10-Q"]):
                 try:
                     ticker_part = title.split('(')[-1].replace("Ticker: ", "").replace(")", "").strip()
                     form_type = "10-K" if "10-K" in title else "10-Q"
                     
-                    # GET THE LINK: Find the link tag and pull the 'href' attribute
                     link_tag = entry.find('atom:link', ns)
                     filing_link = link_tag.attrib.get('href') if link_tag is not None else ""
                     
@@ -72,11 +77,11 @@ def main():
     conn.commit()
 
     # 4. EXPORT TO CSV
-    cursor.execute("SELECT ticker, name, next_earnings, last_filing, filing_url, timestamp FROM ticker_event_log ORDER BY ticker ASC")
+    cursor.execute("SELECT ticker, name, event_scenario, next_earnings, last_filing, filing_url, timestamp FROM ticker_event_log ORDER BY ticker ASC")
     rows = cursor.fetchall()
     with open(CSV_OUTPUT, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['Ticker', 'Company', 'Earnings', 'Last 10-K/Q', 'Filing Link', 'LastSync'])
+        writer.writerow(['Ticker', 'Company', 'Status', 'Earnings', 'Last 10-K/Q', 'Filing Link', 'LastSync'])
         writer.writerows(rows)
     conn.close()
 
