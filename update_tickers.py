@@ -15,7 +15,7 @@ def main():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    # 1. DATABASE SETUP & MIGRATION Logic
+    # 1. DATABASE SETUP & MIGRATION
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ticker_event_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,41 +26,43 @@ def main():
         )
     ''')
     
-    # Ensure all 4 split-columns exist in older versions of the DB
+    # Force add columns if they don't exist (Fixes OperationalError)
     cursor.execute("PRAGMA table_info(ticker_event_log)")
     existing_cols = [info[1] for info in cursor.fetchall()]
     for col in ['last_10k', 'link_10k', 'last_10q', 'link_10q']:
         if col not in existing_cols:
             cursor.execute(f'ALTER TABLE ticker_event_log ADD COLUMN {col} TEXT DEFAULT "N/A"')
 
-    # 2. FETCH SEC MASTER LIST
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching SEC Ticker Master List...")
-    master_data = requests.get("https://www.sec.gov/files/company_tickers.json", headers=HEADERS).json()
-    tickers = list(master_data.values())
+    # 2. FETCH MASTER LIST
+    print(f"[{datetime.now()}] Fetching SEC Master Ticker List...")
+    try:
+        master_data = requests.get("https://www.sec.gov/files/company_tickers.json", headers=HEADERS).json()
+        tickers = list(master_data.values())
+    except Exception as e:
+        print(f"Failed to fetch master list: {e}")
+        return
+
     total = len(tickers)
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    print(f"Syncing {total} tickers. Estimated time: ~28-30 minutes.")
+    print(f"Syncing {total} tickers. This will take ~28 minutes.")
 
     # 3. HISTORICAL LOOKUP LOOP
     for i, item in enumerate(tickers):
         cik_str = str(item['cik_str']).zfill(10)
-        ticker = item['ticker'].upper()
+        ticker = str(item['ticker']).upper()
         
-        # UI: Progress Bar for GitHub Logs
-        percent = (i + 1) / total * 100
-        sys.stdout.write(f'\r|{"█" * int(percent/2):- <50}| {percent:.1f}% Processing: {ticker} ')
-        sys.stdout.flush()
+        # simplified progress display to prevent formatting errors
+        if i % 50 == 0:
+            sys.stdout.write(f"\rProgress: {i}/{total} ({ticker}) ")
+            sys.stdout.flush()
 
-        # Insert or update basic info
         cursor.execute('''
             INSERT OR IGNORE INTO ticker_event_log (cik, ticker, name, timestamp) 
             VALUES (?, ?, ?, ?)
         ''', (int(cik_str), ticker, item['title'], now))
 
         try:
-            # Respect SEC Rate Limit: 10 requests per second
-            time.sleep(0.12) 
+            time.sleep(0.12) # Stay under 10 req/sec
             resp = requests.get(f"https://data.sec.gov/submissions/CIK{cik_str}.json", headers=HEADERS)
             
             if resp.status_code == 200:
@@ -70,9 +72,7 @@ def main():
                 k_date, k_link = "N/A", ""
                 q_date, q_link = "N/A", ""
 
-                # Iterate through history to find the NEWEST 10-K and 10-Q
                 for j, form in enumerate(recent.get('form', [])):
-                    # Assemble the Filing Link
                     acc = recent['accessionNumber'][j].replace('-', '')
                     doc = recent['primaryDocument'][j]
                     date = recent['reportDate'][j]
@@ -83,7 +83,6 @@ def main():
                     elif form == '10-Q' and q_date == "N/A":
                         q_date, q_link = date, link
                     
-                    # Optimization: stop searching once both are found
                     if k_date != "N/A" and q_date != "N/A":
                         break
                 
@@ -93,9 +92,8 @@ def main():
                     WHERE ticker = ?
                 ''', (k_date, k_link, q_date, q_link, now, ticker))
             
-            # Save progress every 250 items
-            if i % 250 == 0: conn.commit()
-        except Exception: continue
+            if i % 500 == 0: conn.commit()
+        except: continue
 
     conn.commit()
     
@@ -108,7 +106,7 @@ def main():
         writer.writerows(rows)
     
     conn.close()
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Sync finished. Global DB updated.")
+    print(f"\n[{datetime.now()}] Update Complete.")
 
 if __name__ == "__main__":
     main()
