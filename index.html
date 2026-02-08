@@ -1,28 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SEC Master Monitor</title>
+    <title>SEC Security Master</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 </head>
-<body class="bg-light p-4">
-    <div class="container-fluid bg-white p-4 shadow rounded">
-        <h3>📊 SEC Security Master & AI Research</h3>
-        <table id="masterTable" class="table table-sm table-hover" style="width:100%">
-            <thead>
-                <tr>
-                    <th>Ticker</th>
-                    <th>Company</th>
-                    <th>Status</th>
-                    <th>Earnings</th>
-                    <th>Last Sync</th>
-                </tr>
-            </thead>
-        </table>
+<body class="bg-light">
+    <div class="container-fluid p-4">
+        <div class="card shadow p-4">
+            <h3 class="mb-4">📊 SEC Security Master & Earnings Tracker</h3>
+            <table id="masterTable" class="table table-hover table-sm" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Company</th>
+                        <th>Event</th>
+                        <th>Earnings Info</th>
+                        <th>Last Sync</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <script>
@@ -32,18 +35,19 @@
                 $('#masterTable').DataTable({
                     data: results.data,
                     columns: [
-                        { data: "Ticker" },
+                        { data: "Ticker", render: d => `<b>${d}</b>` },
                         { data: "Company" },
                         { 
-                            data: "Status",
-                            render: s => s === "AI_RESEARCHED" ? `<span class="badge bg-primary">NEW INFO</span>` : s
+                            data: "Status", 
+                            render: s => s === "NEW_FILING" ? `<span class="badge bg-primary">8-K FILED</span>` : s 
                         },
                         { 
                             data: "Earnings",
-                            render: e => e.includes("Confirmed") ? `<b class="text-success">${e}</b>` : e
+                            render: e => e.includes("Confirmed") ? `<span class="text-success fw-bold">✅ ${e}</span>` : `<span class="text-muted">${e}</span>`
                         },
                         { data: "LastSync" }
-                    ]
+                    ],
+                    pageLength: 50
                 });
             }
         });
