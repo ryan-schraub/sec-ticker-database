@@ -1,29 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>SEC Security Master | Ryan Schraub</title>
+    <title>SEC Security Master</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <style>
-        body { padding: 30px; background: #f8f9fa; }
-        .badge-rebrand { background: #dc3545; color: white; }
-        .badge-change { background: #ffc107; color: black; }
-        .ai-text { font-style: italic; color: #555; font-size: 0.9em; }
+        body { padding: 30px; background: #f4f7f6; font-family: sans-serif; }
+        .badge-rebrand { background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+        .badge-change { background: #ffc107; color: black; padding: 4px 8px; border-radius: 4px; }
+        .ai-note { font-style: italic; color: #666; font-size: 0.85rem; }
     </style>
 </head>
 <body>
     <div class="container-fluid bg-white p-4 rounded shadow">
         <h2 class="mb-4">📊 SEC Security Master & AI Insights</h2>
-        <table id="tickerTable" class="table table-striped table-hover" style="width:100%">
+        <table id="tickerTable" class="table table-hover" style="width:100%">
             <thead>
                 <tr>
                     <th>Ticker</th>
                     <th>CIK</th>
-                    <th>Company Name</th>
+                    <th>Name</th>
                     <th>Last Event</th>
-                    <th>AI Research Summary</th>
-                    <th>Date Detected</th>
+                    <th>AI Research</th>
+                    <th>Detected</th>
                 </tr>
             </thead>
         </table>
@@ -48,19 +47,18 @@
                         { 
                             data: "Last Event",
                             render: function(data) {
-                                if (data.includes("REBRAND")) return `<span class="badge badge-rebrand">${data}</span>`;
-                                if (data.includes("TICKER_CHANGE")) return `<span class="badge badge-change">${data}</span>`;
+                                if (data.includes("REBRAND")) return `<span class="badge-rebrand">${data}</span>`;
+                                if (data.includes("TICKER_CHANGE")) return `<span class="badge-change">${data}</span>`;
                                 return data === "-" ? `<span class="text-muted">-</span>` : data;
                             }
                         },
                         { 
                             data: "AI Research",
-                            render: function(data) { return `<span class="ai-text">${data || ""}</span>`; }
+                            render: function(data) { return `<span class="ai-note">${data}</span>`; }
                         },
                         { data: "Date Detected" }
                     ],
-                    pageLength: 25,
-                    order: [[5, 'desc']] // Sort by Date
+                    order: [[5, 'desc']]
                 });
             }
         });
