@@ -2,66 +2,60 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SEC Historical Filing Tracker</title>
+    <title>SEC Filing Tracker</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        body { font-family: -apple-system, sans-serif; margin: 30px; background: #f0f2f5; }
-        .container { max-width: 1100px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        body { font-family: sans-serif; margin: 20px; background: #f4f7f6; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
         th { background: #004a99; color: white; }
-        .btn { text-decoration: none; color: white; background: #007bff; padding: 6px 12px; border-radius: 4px; font-size: 13px; }
-        #search { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .btn { background: #28a745; color: white; text-decoration: none; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+        #search { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>SEC Master Filing Database</h2>
-        <input type="text" id="search" placeholder="Filter by Ticker or Company Name..." onkeyup="filterTable()">
-        <table id="targetTable">
+    <div class="card">
+        <h2>Corporate Filing Database</h2>
+        <input type="text" id="search" placeholder="Search ticker..." onkeyup="filter()">
+        <table id="mainTable">
             <thead>
                 <tr>
                     <th>Ticker</th>
-                    <th>Company Name</th>
-                    <th>Estimated Earnings</th>
+                    <th>Company</th>
+                    <th>Next Earnings</th>
                     <th>Latest 10-K/Q</th>
-                    <th>Document</th>
+                    <th>Link</th>
                 </tr>
             </thead>
             <tbody></tbody>
         </table>
     </div>
-
     <script>
-        async function init() {
-            const resp = await fetch('tickers_preview.csv');
-            const csv = await resp.text();
-            Papa.parse(csv, {
+        async function load() {
+            const r = await fetch('tickers_preview.csv');
+            const data = await r.text();
+            Papa.parse(data, {
                 header: true,
-                complete: (res) => {
-                    const body = document.querySelector('#targetTable tbody');
-                    res.data.forEach(row => {
-                        if(!row.Ticker) return;
+                complete: (results) => {
+                    const tbody = document.querySelector('#mainTable tbody');
+                    results.data.forEach(row => {
+                        if (!row.Ticker) return;
                         const tr = document.createElement('tr');
-                        const link = row['Filing Link'] ? `<a class="btn" href="${row['Filing Link']}" target="_blank">View PDF/HTML</a>` : '—';
-                        tr.innerHTML = `
-                            <td><strong>${row.Ticker}</strong></td>
-                            <td>${row.Company}</td>
-                            <td>${row.Earnings}</td>
-                            <td>${row['Last 10-K/Q']}</td>
-                            <td>${link}</td>
-                        `;
-                        body.appendChild(tr);
+                        const link = row['Filing Link'] ? `<a class="btn" href="${row['Filing Link']}" target="_blank">View</a>` : 'N/A';
+                        tr.innerHTML = `<td><b>${row.Ticker}</b></td><td>${row.Company}</td><td>${row.Earnings}</td><td>${row['Last 10-K/Q']}</td><td>${link}</td>`;
+                        tbody.appendChild(tr);
                     });
                 }
             });
         }
-        function filterTable() {
-            let val = document.getElementById('search').value.toUpperCase();
-            let rows = document.querySelectorAll('#targetTable tbody tr');
-            rows.forEach(r => r.style.display = r.innerText.toUpperCase().includes(val) ? '' : 'none');
+        function filter() {
+            const q = document.getElementById('search').value.toUpperCase();
+            document.querySelectorAll('#mainTable tbody tr').forEach(tr => {
+                tr.style.display = tr.innerText.toUpperCase().includes(q) ? '' : 'none';
+            });
         }
-        init();
+        load();
     </script>
 </body>
 </html>
