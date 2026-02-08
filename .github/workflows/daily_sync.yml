@@ -1,11 +1,11 @@
-name: Hourly SEC & Earnings Sync
+name: SEC Hourly Pulse
 on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
-  build:
+  sync:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -15,14 +15,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install Dependencies
+      - name: Dependencies
         run: pip install requests
-      - name: Run Update
+      - name: Run Master Sync
         run: python update_tickers.py
-      - name: Commit & Push
+      - name: Save State
         run: |
-          git config --global user.name "RyanBot"
-          git config --global user.email "ryan@example.com"
+          git config --global user.name "SEC-Bot"
+          git config --global user.email "bot@example.com"
           git add tickers.db tickers_preview.csv
-          git commit -m "Hourly Sync: $(date)" || echo "No changes"
+          git commit -m "Auto-Sync: $(date)" || echo "No changes"
           git push
