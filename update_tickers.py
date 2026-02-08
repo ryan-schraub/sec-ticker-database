@@ -4,40 +4,23 @@ import csv
 import sys
 from datetime import datetime
 
-# 1. Setup Database with "Self-Healing" Schema Migration
 db_file = 'tickers.db'
 conn = sqlite3.connect(db_file)
 cursor = conn.cursor()
 
-# Ensure main table exists
+# NEW SCHEMA: Each row is a specific "Event" in time
 cursor.execute('''
-    CREATE TABLE IF NOT EXISTS sec_tickers (
-        cik INTEGER PRIMARY KEY,
-        ticker TEXT,
-        name TEXT
-    )
-''')
-
-# MIGRATION: Check if new columns exist; add them if they don't
-cursor.execute("PRAGMA table_info(sec_tickers)")
-columns = [info[1] for info in cursor.fetchall()]
-if 'is_active' not in columns:
-    cursor.execute("ALTER TABLE sec_tickers ADD COLUMN is_active INTEGER DEFAULT 1")
-if 'last_updated' not in columns:
-    cursor.execute("ALTER TABLE sec_tickers ADD COLUMN last_updated DATETIME")
-
-# Ensure history table exists to track changes
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS ticker_history (
+    CREATE TABLE IF NOT EXISTS ticker_event_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cik INTEGER,
-        old_ticker TEXT,
-        new_ticker TEXT,
-        change_date DATETIME
+        ticker TEXT,
+        name TEXT,
+        event_scenario TEXT, -- 'NEW_LISTING', 'TICKER_CHANGE', 'DELISTED', 'ACTIVE_SYNC'
+        is_active INTEGER,
+        timestamp DATETIME
     )
 ''')
 
-# 2. Fetch Data from SEC
 headers = {'User-Agent': 'RyanSchraub (ryan.schraub@gmail.com)'}
 url = "https://www.sec.gov/files/company_tickers.json"
 
@@ -47,50 +30,65 @@ try:
     data = response.json()
     
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    incoming_ciks = set()
+    incoming_ciks = {item['cik_str']: item for item in data.values()}
 
-    # 3. Process Updates & History
-    for entry in data.values():
-        cik = entry['cik_str']
-        ticker = entry['ticker']
-        name = entry['title']
-        incoming_ciks.add(cik)
+    # 1. Check for New Listings or Ticker Changes
+    for cik, info in incoming_ciks.items():
+        ticker = info['ticker']
+        name = info['title']
 
-        # Check for ticker changes before updating
-        cursor.execute("SELECT ticker FROM sec_tickers WHERE cik = ?", (cik,))
-        existing = cursor.fetchone()
-
-        if existing and existing[0] != ticker:
-            # Ticker changed! Log it in the history table
-            cursor.execute('''
-                INSERT INTO ticker_history (cik, old_ticker, new_ticker, change_date)
-                VALUES (?, ?, ?, ?)
-            ''', (cik, existing[0], ticker, current_time))
-
-        # Update current source of truth
+        # Get the LATEST known state for this CIK
         cursor.execute('''
-            INSERT INTO sec_tickers (cik, ticker, name, is_active, last_updated)
-            VALUES (?, ?, ?, 1, ?)
-            ON CONFLICT(cik) DO UPDATE SET
-                ticker=excluded.ticker,
-                name=excluded.name,
-                is_active=1,
-                last_updated=excluded.last_updated
-        ''', (cik, ticker, name, current_time))
+            SELECT ticker, name, is_active FROM ticker_event_log 
+            WHERE cik = ? ORDER BY timestamp DESC LIMIT 1
+        ''', (cik,))
+        latest = cursor.fetchone()
 
-    # 4. Handle Delistings: Mark missing companies as inactive
-    # If it was in our DB but is NOT in today's SEC file, it is inactive
-    cursor.execute("UPDATE sec_tickers SET is_active = 0 WHERE cik NOT IN ({})".format(
-        ','.join(['?'] * len(incoming_ciks))), list(incoming_ciks))
+        scenario = None
+        if not latest:
+            scenario = "NEW_LISTING"
+        elif latest[0] != ticker:
+            scenario = "TICKER_CHANGE"
+        elif latest[2] == 0: # If it was previously delisted but came back
+            scenario = "RE_LISTED"
+        
+        # If a change happened, log a new row
+        if scenario:
+            cursor.execute('''
+                INSERT INTO ticker_event_log (cik, ticker, name, event_scenario, is_active, timestamp)
+                VALUES (?, ?, ?, ?, 1, ?)
+            ''', (cik, ticker, name, scenario, current_time))
+
+    # 2. Check for Delistings (Scenario: DELISTED)
+    # Find CIKs that are currently marked 'active' in our DB but are NOT in the SEC file
+    cursor.execute('''
+        SELECT DISTINCT cik, ticker, name FROM ticker_event_log t1
+        WHERE is_active = 1 
+        AND timestamp = (SELECT MAX(timestamp) FROM ticker_event_log t2 WHERE t2.cik = t1.cik)
+    ''')
+    current_actives = cursor.fetchall()
+
+    for cik, ticker, name in current_actives:
+        if cik not in incoming_ciks:
+            cursor.execute('''
+                INSERT INTO ticker_event_log (cik, ticker, name, event_scenario, is_active, timestamp)
+                VALUES (?, ?, ?, 'DELISTED', 0, ?)
+            ''', (cik, ticker, name, current_time))
 
     conn.commit()
-    print(f"Update complete: {len(incoming_ciks)} records processed.")
 
-    # 5. Export Daily CSV Preview for GitHub Browser
-    cursor.execute("SELECT ticker, cik, name, is_active FROM sec_tickers ORDER BY ticker ASC")
+    # 3. Export "Current State" for the CSV Preview
+    # This complex query only grabs the MOST RECENT row for every company
+    cursor.execute('''
+        SELECT ticker, cik, name, event_scenario, is_active, timestamp 
+        FROM ticker_event_log t1
+        WHERE timestamp = (SELECT MAX(timestamp) FROM ticker_event_log t2 WHERE t2.cik = t1.cik)
+        ORDER BY ticker ASC
+    ''')
+    
     with open('tickers_preview.csv', 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['Ticker', 'CIK', 'Name', 'Active Status'])
+        writer.writerow(['Ticker', 'CIK', 'Name', 'Last Event', 'Active', 'Date'])
         writer.writerows(cursor.fetchall())
 
 except Exception as e:
