@@ -7,14 +7,14 @@ from datetime import datetime
 # CONFIGURATION
 DB_FILE = 'tickers.db'
 CSV_OUTPUT = 'tickers_preview.csv'
-USER_EMAIL = "ryan.schraub@gmail.com"
+USER_EMAIL = "ryan.schraub@gmail.com" # Required for SEC Fair Access Policy
 SEC_URL = "https://www.sec.gov/files/company_tickers.json"
 
 def main():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    # 1. Ensure schema exists
+    # 1. Create table with a column for 'event_scenario'
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ticker_event_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,23 +27,28 @@ def main():
         )
     ''')
 
-    # 2. Check if this is the very first run
+    # 2. Check if this is the very first time running (baseline)
     cursor.execute("SELECT COUNT(*) FROM ticker_event_log")
-    is_first_run = cursor.fetchone()[0] == 0
+    is_database_empty = cursor.fetchone()[0] == 0
     
     # 3. Fetch data from SEC
     headers = {'User-Agent': f'SecurityMasterBot ({USER_EMAIL})'}
-    response = requests.get(SEC_URL, headers=headers)
-    data = response.json()
+    try:
+        response = requests.get(SEC_URL, headers=headers)
+        data = response.json()
+    except Exception as e:
+        print(f"Error fetching data: {e}")
+        return
+
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     incoming_ciks = {item['cik_str']: item for item in data.values()}
 
-    # 4. Process all companies
+    # 4. Compare SEC data to your Database
     for cik, info in incoming_ciks.items():
         ticker = str(info['ticker']).upper()
         name = info['title']
 
-        # Get the most recent record for this CIK
+        # Get the latest known state for this CIK
         cursor.execute('''
             SELECT ticker, name FROM ticker_event_log 
             WHERE cik = ? ORDER BY timestamp DESC LIMIT 1
@@ -53,10 +58,11 @@ def main():
         scenario = None
         
         if not latest:
-            # FIX: If first run, don't say NEW_LISTING
-            scenario = "-" if is_first_run else "NEW_LISTING"
+            # FIX: If database was empty, it's just setup data (-). 
+            # If database HAD data, this truly is a NEW_LISTING.
+            scenario = "-" if is_database_empty else "NEW_LISTING"
         elif latest[0] != ticker:
-            # Specific logic for AAM / Dauch Rebranding
+            # Specific logic for the AAM rebranding to Dauch
             if ticker == "DCH" and "DAUCH" in name.upper():
                 scenario = f"REBRAND: AAM rebranded to Dauch Corp ({latest[0]} → {ticker})"
             else:
@@ -72,7 +78,7 @@ def main():
 
     conn.commit()
 
-    # 5. Export for Website
+    # 5. Export CURRENT ACTIVE tickers for the website
     cursor.execute('''
         SELECT ticker, cik, name, event_scenario, timestamp 
         FROM ticker_event_log t1
@@ -87,6 +93,7 @@ def main():
         writer.writerows(cursor.fetchall())
 
     conn.close()
+    print("Update complete.")
 
 if __name__ == "__main__":
     main()
