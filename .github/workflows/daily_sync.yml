@@ -1,17 +1,15 @@
-name: Daily SEC Ticker Sync
+name: Daily Security Master Sync
 
 on:
   schedule:
-    - cron: '0 9 * * *' # Runs daily at 9:00 AM UTC
-  workflow_dispatch:   # This allows you to run it manually to test
+    - cron: '0 9 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    # CRITICAL: This allows the "robot" to save the database and CSV to your repo
     permissions:
-      contents: write
+      contents: write # Essential for saving the database back
 
     steps:
       - name: Checkout code
@@ -33,5 +31,5 @@ jobs:
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
           git add -A
-          git commit -m "Automated daily ticker update: $(date)" || echo "No changes to commit"
+          git commit -m "Security Master Update: $(date)" || echo "No changes to commit"
           git push
