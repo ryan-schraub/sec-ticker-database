@@ -1,0 +1,1 @@
+# sec-ticker-database
