@@ -7,7 +7,7 @@ on:
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60 # Extended for full list sync
     permissions:
       contents: write
     steps:
@@ -25,5 +25,5 @@ jobs:
           git config --global user.name "SEC-Sync-Bot"
           git config --global user.email "bot@example.com"
           git add tickers.db tickers_preview.csv
-          git commit -m "Full SEC History Sync: $(date)" || echo "No changes"
+          git commit -m "Daily SEC Update: $(date)" || echo "No changes"
           git push
