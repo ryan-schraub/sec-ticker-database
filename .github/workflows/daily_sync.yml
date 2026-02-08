@@ -2,14 +2,14 @@ name: Daily Security Master Sync
 
 on:
   schedule:
-    - cron: '0 9 * * *'
-  workflow_dispatch:
+    - cron: '0 9 * * *' # Runs every day at 9 AM UTC
+  workflow_dispatch:   # Manual "Run" button
 
 jobs:
-  build:
+  sync:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Essential for saving the database back
+      contents: write # Essential for saving data
 
     steps:
       - name: Checkout code
@@ -23,13 +23,13 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Run sync script
+      - name: Run Security Master Update
         run: python update_tickers.py
 
-      - name: Commit and push changes
+      - name: Commit and Push Results
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git add -A
-          git commit -m "Security Master Update: $(date)" || echo "No changes to commit"
+          git add -A # Captures new DB tables and CSV
+          git commit -m "Security Master Update: $(date)" || echo "No changes"
           git push
