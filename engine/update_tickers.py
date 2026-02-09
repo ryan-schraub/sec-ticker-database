@@ -2,11 +2,10 @@ import requests
 import sqlite3
 import csv
 import time
-import sys
 import os
 from datetime import datetime
 
-# --- AUTOMATIC PATH ROUTING ---
+# --- PATHS ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_FILE = os.path.join(BASE_DIR, 'tickers.db')
 CSV_OUTPUT = os.path.join(BASE_DIR, 'tickers_preview.csv')
@@ -14,128 +13,97 @@ CSV_OUTPUT = os.path.join(BASE_DIR, 'tickers_preview.csv')
 USER_EMAIL = "ryan.schraub@gmail.com" 
 HEADERS = {'User-Agent': f'RyanBot ({USER_EMAIL})'}
 
-# --- BULLETPROOF FILING DEFINITIONS ---
-# Includes Foreign Private Issuers (20-F), Canadian (40-F), and Amendments (/A)
-ANNUAL_FORMS = {'10-K', '20-F', '40-F', '10-K/A', '20-F/A', '40-F/A'}
-QUARTERLY_FORMS = {'10-Q', '6-K', '10-Q/A', '6-K/A'}
-
 def main():
-    print(f"[{datetime.now()}] Initializing Bulletproof SEC Sync...")
+    print(f"[{datetime.now()}] Initializing SEC Engine with Revenue Support...")
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    # 1. DATABASE SETUP (Including Metadata)
+    # 1. UPDATED TABLE (Added Revenue)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ticker_event_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cik INTEGER UNIQUE, 
-            ticker TEXT, 
-            name TEXT,
-            sic TEXT, industry TEXT,
+            cik INTEGER UNIQUE, ticker TEXT, name TEXT, industry TEXT,
             location TEXT, incorporated TEXT, fye TEXT,
-            last_10k TEXT, link_10k TEXT,
-            last_10q TEXT, link_10q TEXT,
-            timestamp DATETIME
+            last_10k TEXT, link_10k TEXT, revenue REAL, timestamp DATETIME
         )
     ''')
     
-    # 2. FETCH MASTER LIST
+    # Ensure the revenue column exists if the table was already created
     try:
-        master_data = requests.get("https://www.sec.gov/files/company_tickers.json", headers=HEADERS).json()
-        tickers = list(master_data.values())
-    except Exception as e:
-        print(f"Failed to fetch master list: {e}")
-        return
+        cursor.execute("ALTER TABLE ticker_event_log ADD COLUMN revenue REAL")
+    except:
+        pass
 
-    # 3. SYNC LOOP
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    master_data = requests.get("https://www.sec.gov/files/company_tickers.json", headers=HEADERS).json()
+    tickers = list(master_data.values())
+
     for i, item in enumerate(tickers):
         cik_str = str(item['cik_str']).zfill(10)
         ticker = str(item['ticker']).upper()
         
         if i % 100 == 0:
-            sys.stdout.write(f"\rProcessing: {i}/{len(tickers)} ({ticker})")
-            sys.stdout.flush()
+            print(f"Processing {i}/{len(tickers)}: {ticker}")
 
         try:
-            time.sleep(0.11) # SEC rate limit: 10 requests/sec
-            resp = requests.get(f"https://data.sec.gov/submissions/CIK{cik_str}.json", headers=HEADERS)
+            time.sleep(0.12) # Stay under 10 requests/sec limit
             
-            if resp.status_code == 200:
-                data = resp.json()
-                
-                # METADATA EXTRACTION
-                sic = data.get('sic', 'N/A')
-                industry = data.get('sicDescription', 'N/A')
-                incorp = data.get('stateOfIncorporation', 'N/A')
-                fye = data.get('fiscalYearEnd', 'N/A')
-                
-                biz = data.get('addresses', {}).get('business', {})
-                location = f"{biz.get('city', '')}, {biz.get('stateProvince', '')}".strip(", ")
-
-                # FILING LOGIC (The Waterfall)
-                recent = data.get('filings', {}).get('recent', {})
-                forms = recent.get('form', [])
-                dates = recent.get('reportDate', [])
-                accs = recent.get('accessionNumber', [])
-                docs = recent.get('primaryDocument', [])
-
-                # DANGER FIX: Create a list of tuples and sort by date descending
-                # This ensures we get the newest report even if it's listed out of order
-                filing_tuples = []
-                for j in range(len(forms)):
-                    filing_tuples.append({
-                        'form': forms[j],
-                        'date': dates[j],
-                        'acc': accs[j].replace('-', ''),
-                        'doc': docs[j]
-                    })
-                
-                # Sort by date (Y-M-D strings sort correctly)
-                filing_tuples.sort(key=lambda x: x['date'], reverse=True)
-
-                k_date, k_link, q_date, q_link = "N/A", "", "N/A", ""
-
-                for f in filing_tuples:
-                    link = f"https://www.sec.gov/Archives/edgar/data/{int(cik_str)}/{f['acc']}/{f['doc']}"
-                    
-                    # Catch Annuals (10-K, 20-F, 40-F)
-                    if f['form'] in ANNUAL_FORMS and k_date == "N/A":
-                        k_date, k_link = f['date'], link
-                    
-                    # Catch Quarterlies (10-Q, 6-K)
-                    if f['form'] in QUARTERLY_FORMS and q_date == "N/A":
-                        q_date, q_link = f['date'], link
-                        
-                    if k_date != "N/A" and q_date != "N/A":
-                        break
-
-                # SAVE TO DB
-                cursor.execute('''
-                    INSERT INTO ticker_event_log (cik, ticker, name, sic, industry, location, incorporated, fye, last_10k, link_10k, last_10q, link_10q, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(cik) DO UPDATE SET
-                        ticker=excluded.ticker, name=excluded.name, sic=excluded.sic, industry=excluded.industry,
-                        location=excluded.location, incorporated=excluded.incorporated, fye=excluded.fye,
-                        last_10k=excluded.last_10k, link_10k=excluded.link_10k, 
-                        last_10q=excluded.last_10q, link_10q=excluded.link_10q, timestamp=excluded.timestamp
-                ''', (int(cik_str), ticker, item['title'], sic, industry, location, incorp, fye, k_date, k_link, q_date, q_link, now))
+            # --- CALL 1: SUBMISSIONS (For Links & Metadata) ---
+            sub_resp = requests.get(f"https://data.sec.gov/submissions/CIK{cik_str}.json", headers=HEADERS).json()
             
-            if i % 500 == 0: conn.commit()
-        except Exception:
+            # --- CALL 2: COMPANY FACTS (For Revenue) ---
+            # We fetch the specific "Revenues" tag from the SEC's XBRL data
+            facts_resp = requests.get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik_str}.json", headers=HEADERS).json()
+            
+            # REVENUE EXTRACTION LOGIC
+            revenue = 0
+            # We try the three most common SEC revenue tags in order of reliability
+            for tag in ['Revenues', 'SalesRevenueNet', 'RevenueFromContractWithCustomerExcludingAssessedTax']:
+                try:
+                    # Get the 'USD' entries for the tag and take the most recent value
+                    rev_entries = facts_resp['facts']['us-gaap'][tag]['units']['USD']
+                    # Sort by 'end' date to get the latest annual/quarterly number
+                    revenue = sorted(rev_entries, key=lambda x: x['end'])[-1]['val']
+                    if revenue: break 
+                except KeyError:
+                    continue
+
+            # METADATA & FILINGS (Existing logic)
+            industry = sub_resp.get('sicDescription', 'N/A')
+            biz = sub_resp.get('addresses', {}).get('business', {})
+            location = f"{biz.get('city', '')}, {biz.get('stateProvince', '')}".strip(", ")
+            
+            recent = sub_resp.get('filings', {}).get('recent', {})
+            k_date, k_link = "N/A", ""
+            if '10-K' in recent.get('form', []):
+                idx = recent['form'].index('10-K')
+                acc = recent['accessionNumber'][idx].replace('-', '')
+                doc = recent['primaryDocument'][idx]
+                k_date = recent['reportDate'][idx]
+                k_link = f"https://www.sec.gov/Archives/edgar/data/{int(cik_str)}/{acc}/{doc}"
+
+            # SAVE TO DB
+            cursor.execute('''
+                INSERT INTO ticker_event_log (cik, ticker, name, industry, location, last_10k, link_10k, revenue, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(cik) DO UPDATE SET
+                    ticker=excluded.ticker, industry=excluded.industry, revenue=excluded.revenue,
+                    last_10k=excluded.last_10k, link_10k=excluded.link_10k, timestamp=excluded.timestamp
+            ''', (int(cik_str), ticker, item['title'], industry, location, k_date, k_link, revenue, datetime.now()))
+            
+            if i % 100 == 0: conn.commit()
+
+        except Exception as e:
             continue
 
-    conn.commit()
-    
-    # 4. EXPORT TO CSV
-    cursor.execute("SELECT ticker, name, location, incorporated, fye, industry, last_10k, link_10k, last_10q, link_10q FROM ticker_event_log ORDER BY ticker ASC")
+    # 4. EXPORT TO CSV (Added Revenue to Header)
+    cursor.execute("SELECT Ticker, Name, Location, Industry, Revenue, last_10k, link_10k FROM ticker_event_log ORDER BY revenue DESC")
     with open(CSV_OUTPUT, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['Ticker', 'Company', 'Location', 'Inc', 'FYE', 'Industry', '10K_Date', '10K_Link', '10Q_Date', '10Q_Link'])
+        writer.writerow(['Ticker', 'Company', 'Location', 'Industry', 'Revenue', '10K_Date', '10K_Link'])
         writer.writerows(cursor.fetchall())
     
+    conn.commit()
     conn.close()
-    print(f"\n[{datetime.now()}] Sync Complete. CSV Generated.")
+    print("Engine Finished. CSV and DB now contain Revenue data.")
 
 if __name__ == "__main__":
     main()
