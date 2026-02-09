@@ -1,0 +1,29 @@
+name: TEST - Revenue Extraction
+on:
+  workflow_dispatch: # This adds the manual "Run" button
+
+jobs:
+  test-revenue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Test Revenue Script
+        # We only run the revenue script here
+        run: python engine/extract_revenue.py
+        
+      - name: Commit Test Results
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tickers.db
+          git commit -m "Test: Revenue Enrichment" || echo "No changes"
+          git push
