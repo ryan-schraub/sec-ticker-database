@@ -24,7 +24,7 @@ jobs:
         run: pip install requests pandas edgartools jinja2
 
       - name: Run SEC Intelligence Engine
-        # This now handles BOTH ticker sync and revenue enrichment
+        # This combined script handles ticker sync and revenue enrichment
         continue-on-error: true
         run: python engine/update_tickers.py
 
@@ -33,10 +33,11 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # Pull latest changes to avoid "[rejected]" errors
-          git pull --rebase origin main
-          
+          # 1. Stage changes FIRST to avoid the "unstaged changes" rebase error
           git add tickers.db tickers_preview.csv
           
-          # Only commit if there are actual changes
-          git diff --quiet && git diff --staged --quiet || (git commit -m "SEC Update: $(date +'%Y-%m-%d')" && git push origin main)
+          # 2. Pull with rebase now that changes are staged
+          git pull --rebase origin main
+          
+          # 3. Only commit and push if there is actually new data to save
+          git diff --quiet --staged || (git commit -m "SEC Update: $(date +'%Y-%m-%d')" && git push origin main)
