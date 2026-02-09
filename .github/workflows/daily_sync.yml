@@ -9,11 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
-      contents: write # REQUIRED for the bot to push changes
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1 # We only need the latest state to save time/space
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -21,19 +21,20 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
-        run: pip install requests pandas edgartools jinja2
+        run: pip install requests pandas edgartools jinja2 sqlite3
 
       - name: Run SEC Sync
         continue-on-error: true
         run: python engine/update_tickers.py
 
+      - name: Run Revenue Enrichment
+        continue-on-error: true
+        run: python engine/enrich_revenue.py
+
       - name: Commit and Push
         run: |
-          # Use the official GitHub Actions Bot identity
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
+          git pull --rebase origin main
           git add tickers.db tickers_preview.csv
-          
-          # Only commit if there are actual changes to the files
           git diff --quiet && git diff --staged --quiet || (git commit -m "SEC Update: $(date +'%Y-%m-%d')" && git push origin main)
