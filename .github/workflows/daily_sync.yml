@@ -1,4 +1,5 @@
 name: SEC Intelligence Sync
+
 on:
   schedule:
     - cron: '0 0 * * *' 
@@ -7,11 +8,14 @@ on:
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # Increased to 6 hours to ensure 10,379 tickers finish processing
+    timeout-minutes: 360
     permissions:
       contents: write
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0 
 
@@ -21,10 +25,13 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
-        run: pip install requests pandas edgartools jinja2
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas edgartools jinja2 stamina
 
       - name: Run SEC Intelligence Engine
-        continue-on-error: true
+        # We set a long timeout here, but continue-on-error is false 
+        # so we know if the Python logic itself actually fails.
         run: python engine/update_tickers.py
 
       - name: Commit and Push
@@ -32,11 +39,17 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # 1. Autostash handles the "unstaged changes" rebase error
+          # Pull latest changes in case of concurrent runs
           git pull --rebase --autostash origin main
           
-          # 2. Stage the new files
-          git add tickers.db tickers_preview.csv
+          # Stage the specific output files mentioned in your logs
+          # Using 'force' or checking existence prevents 'pathspec' errors
+          git add tickers.db tickers_preview.csv || echo "Files not found, skipping add."
           
-          # 3. Commit and push
-          git diff --quiet --staged || (git commit -m "SEC Update: $(date +'%Y-%m-%d')" && git push origin main)
+          # Only commit and push if there are actual data changes
+          if ! git diff --quiet --staged; then
+            git commit -m "SEC Update: $(date +'%Y-%m-%d %H:%M')"
+            git push origin main
+          else
+            echo "No changes detected in SEC data. Skipping push."
+          fi
