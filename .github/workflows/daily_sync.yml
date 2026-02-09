@@ -7,13 +7,13 @@ on:
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 180 # 3 hours (plenty of time for 8k tickers at 10req/sec)
+    timeout-minutes: 180
     permissions:
-      contents: write
+      contents: write # REQUIRED for the bot to push changes
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetches all history so it can push safely
+          fetch-depth: 1 # We only need the latest state to save time/space
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -24,15 +24,16 @@ jobs:
         run: pip install requests pandas edgartools jinja2
 
       - name: Run SEC Sync
-        # Using "continue-on-error" so a single SEC API failure doesn't kill the whole run
         continue-on-error: true
         run: python engine/update_tickers.py
 
       - name: Commit and Push
         run: |
-          git config --global user.name "SEC-Sync-Bot"
-          git config --global user.email "bot@example.com"
-          git pull origin main # Safety pull to sync with any manual changes
+          # Use the official GitHub Actions Bot identity
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
           git add tickers.db tickers_preview.csv
-          git commit -m "SEC Update: $(date +'%Y-%m-%d')" || echo "No changes"
-          git push origin main
+          
+          # Only commit if there are actual changes to the files
+          git diff --quiet && git diff --staged --quiet || (git commit -m "SEC Update: $(date +'%Y-%m-%d')" && git push origin main)
